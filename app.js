@@ -3,9 +3,9 @@
    ============================================================================ */
 const CONFIG = {
   // Paste your Google Apps Script Web App URL here (ends in /exec):
-  APPS_SCRIPT_URL: "",
+  APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbyIvBQdu26qegJ0smyPYRRSjwBUn4HsJ57uxI1BkG8RrXx2zSJ4SG6ix1ZjtIDIRN8n/exec",
   // Paste your Google OAuth Client ID here (ends in .apps.googleusercontent.com):
-  GOOGLE_CLIENT_ID: "",
+  GOOGLE_CLIENT_ID: "253371814543-pv1eg7kvmh0hvovddogjbjt958fon5at.apps.googleusercontent.com",
 };
 
 const PEOPLE = [
