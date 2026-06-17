@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Side Quest — game recs for the crew</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.2.0/tabler-icons.min.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="header">
+  <div class="brand"><i class="ti ti-sword" aria-hidden="true"></i><span class="name">Side<b>Quest</b></span></div>
+  <div class="search">
+    <i class="ti ti-search" aria-hidden="true"></i>
+    <input id="search" type="text" placeholder="Search games…" aria-label="Search games">
+  </div>
+  <div class="hspacer"></div>
+  <button class="iconbtn" id="themeBtn" aria-label="Toggle dark and light mode"><i class="ti ti-moon" id="themeIcon" aria-hidden="true"></i></button>
+  <button class="iconbtn primary" id="addBtn"><i class="ti ti-plus" aria-hidden="true"></i><span class="hide-sm">Add game</span></button>
+  <div id="authSlot"></div>
+</header>
+
+<main class="wrap">
+  <p class="tagline">Games for the crew — solo, co-op, and chaos. Pick who's around tonight and find something to play together. <b>Built by Lynn.</b></p>
+
+  <div id="setupBanner"></div>
+
+  <!-- PARTY SELECT -->
+  <section class="panel" aria-labelledby="partyHead">
+    <div class="panel-head"><i class="ti ti-users-group" aria-hidden="true"></i><h2 id="partyHead">Who's playing tonight?</h2></div>
+    <div class="party-row" id="partyRow"></div>
+    <div class="party-controls">
+      <div class="seg" role="group" aria-label="Match mode">
+        <button id="modeAll" data-mode="all" aria-pressed="true">All of them</button>
+        <button id="modeAny" data-mode="any" aria-pressed="false">Any of them</button>
+      </div>
+      <span class="party-readout" id="partyReadout">No one selected — showing everything</span>
+      <button class="ghostbtn" id="clearParty" style="margin-left:auto" hidden>Clear</button>
+    </div>
+  </section>
+
+  <!-- FILTERS -->
+  <div class="filterbar" id="filterbar"></div>
+
+  <div class="toolbar">
+    <div class="count" id="count"></div>
+    <div class="fgroup">
+      <span class="flabel">Sort</span>
+      <select class="sortsel" id="sort">
+        <option value="rating">Steam rating</option>
+        <option value="upvotes">Most upvoted</option>
+        <option value="release">Release date</option>
+        <option value="az">A–Z</option>
+        <option value="added">Recently added</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <div id="emptyState"></div>
+</main>
+
+<!-- DETAIL MODAL -->
+<div class="scrim" id="detailScrim"><div class="modal detail" id="detailModal" role="dialog" aria-modal="true" aria-label="Game details"></div></div>
+<!-- ADD GAME MODAL -->
+<div class="scrim" id="addScrim"><div class="modal" id="addModal" role="dialog" aria-modal="true" aria-label="Add a game"></div></div>
+<!-- NAME MODAL -->
+<div class="scrim" id="nameScrim"><div class="modal" id="nameModal" role="dialog" aria-modal="true" aria-label="Set display name" style="max-width:440px"></div></div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="app.js"></script>
+</body>
+</html>
