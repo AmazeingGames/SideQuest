@@ -3,9 +3,9 @@
    ============================================================================ */
 const CONFIG = {
   // Paste your Google Apps Script Web App URL here (ends in /exec):
-  APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbwM7-1jIdeu2ZNch7DYvwPEtPX8HImOgpdmrW15Ml9kgQhn_kLip2v5u9iFGpJn_o5W/exec",
+  APPS_SCRIPT_URL: "",
   // Paste your Google OAuth Client ID here (ends in .apps.googleusercontent.com):
-  GOOGLE_CLIENT_ID: "253371814543-pv1eg7kvmh0hvovddogjbjt958fon5at.apps.googleusercontent.com",
+  GOOGLE_CLIENT_ID: "",
 };
 
 const PEOPLE = [
@@ -39,9 +39,20 @@ const lsSet = (k,v) => { try { localStorage.setItem(k,v); } catch {} };
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const hasBackend = () => !!CONFIG.APPS_SCRIPT_URL;
 const hasAuth = () => !!CONFIG.GOOGLE_CLIENT_ID;
-const COVER = a => `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${a}/library_600x900.jpg`;
+const COVER = a => `https://cdn.cloudflare.steamstatic.com/steam/apps/${a}/header.jpg`;
 const HEADER = a => `https://cdn.cloudflare.steamstatic.com/steam/apps/${a}/header.jpg`;
 const STEAM_URL = a => `https://store.steampowered.com/app/${a}/`;
+// ordered list of fallback image URLs tried in turn if the primary 404s
+const COVER_FALLBACKS = a => [
+  `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${a}/header.jpg`,
+  `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${a}/header.jpg`,
+  `https://steamcdn-a.akamaihd.net/steam/apps/${a}/header.jpg`,
+].join("|");
+window.imgFB = function(img){
+  const fb=(img.dataset.fb||"").split("|").filter(Boolean);
+  if(fb.length){ img.dataset.fb=fb.slice(1).join("|"); img.src=fb[0]; }
+  else { img.style.visibility="hidden"; }   // reveal the placeholder behind it
+};
 
 const state = {
   games: [], comments: [], upvotes: [], users: [],
@@ -87,7 +98,7 @@ function applyGames(arr){
     appid:String(g.appid), title:g.title||"", people:g.people||[], genres:g.genres||[],
     modes:g.modes||[], dim:g.dim||"", players:+g.players||1, mods:!!g.mods, note:g.note||"",
     reviewPct:(g.reviewPct===0||g.reviewPct)?+g.reviewPct:null, reviewDesc:g.reviewDesc||"",
-    releaseDate:g.releaseDate||"", releaseTs:+g.releaseTs||0, addedTs:+g.addedTs||0,
+    releaseDate:g.releaseDate||"", releaseTs:+g.releaseTs||0, addedTs:+g.addedTs||0, trailer:g.trailer||"",
   }));
 }
 const upCount = appid => state.upvotes.filter(u=>u.appid===String(appid)).length;
@@ -143,7 +154,7 @@ function renderGrid(){
     return `<button class="card" data-app="${g.appid}" aria-label="${esc(g.title)}">
       <div class="cover">
         <div class="ph"><i class="ti ti-device-gamepad-2"></i></div>
-        <img loading="lazy" src="${COVER(g.appid)}" alt="" onerror="this.onerror=null;this.src='${HEADER(g.appid)}'">
+        <img loading="lazy" src="${COVER(g.appid)}" alt="" data-fb="${COVER_FALLBACKS(g.appid)}" onerror="imgFB(this)">
         ${g.mods?`<span class="mods-badge"><i class="ti ti-alert-triangle"></i>Mods</span>`:""}
         ${uc?`<span class="up-badge"><i class="ti ti-arrow-big-up-lines"></i>${uc}</span>`:""}
       </div>
@@ -244,8 +255,9 @@ function openDetail(appid){
 
   $("#detailModal").innerHTML = `
     <button class="mclose" aria-label="Close"><i class="ti ti-x"></i></button>
-    <div class="dhero">
-      <img src="${HEADER(g.appid)}" alt="" onerror="this.style.display='none'">
+    <div class="dhero" id="dhero">
+      <img src="${HEADER(g.appid)}" alt="" data-fb="${COVER_FALLBACKS(g.appid)}" onerror="imgFB(this)">
+      ${g.trailer?`<button class="playbtn" id="playTrailer"><i class="ti ti-player-play-filled"></i> Watch trailer</button>`:""}
       <div class="scrimgrad"></div>
     </div>
     <div class="dbody">
@@ -280,6 +292,10 @@ function openDetail(appid){
   $$("[data-del]",m).forEach(b=>b.addEventListener("click",()=>delComment(b.dataset.del,g.appid)));
   const upB=$("#upBtn",m); if(upB) upB.addEventListener("click",()=>toggleUpvote(g.appid));
   const cp=$("#cPost",m); if(cp) cp.addEventListener("click",()=>postComment(g.appid));
+  const pt=$("#playTrailer",m); if(pt) pt.addEventListener("click",()=>{
+    const hero=$("#dhero",m);
+    hero.innerHTML=`<video src="${esc(g.trailer)}" controls autoplay playsinline poster="${HEADER(g.appid)}"></video>`;
+  });
   openScrim("#detailScrim");
 }
 
@@ -393,16 +409,18 @@ async function saveGame(){
   }
   closeModals(); render();
 }
-function normalize(g){ return {appid:String(g.appid),title:g.title||"",people:g.people||[],genres:g.genres||[],modes:g.modes||[],dim:g.dim||"2D",players:+g.players||1,mods:!!g.mods,note:g.note||"",reviewPct:(g.reviewPct===0||g.reviewPct)?+g.reviewPct:null,reviewDesc:g.reviewDesc||"",releaseDate:g.releaseDate||"",releaseTs:+g.releaseTs||0,addedTs:+g.addedTs||Date.now()}; }
+function normalize(g){ return {appid:String(g.appid),title:g.title||"",people:g.people||[],genres:g.genres||[],modes:g.modes||[],dim:g.dim||"2D",players:+g.players||1,mods:!!g.mods,note:g.note||"",reviewPct:(g.reviewPct===0||g.reviewPct)?+g.reviewPct:null,reviewDesc:g.reviewDesc||"",releaseDate:g.releaseDate||"",releaseTs:+g.releaseTs||0,trailer:g.trailer||"",addedTs:+g.addedTs||Date.now()}; }
 
 /* ============================================================ AUTH (Google) */
+let gisReady=false;
 function initAuth(){
   renderAuthSlot();
   if(!hasAuth()) return;
   const tryInit=()=>{
     if(!(window.google&&google.accounts&&google.accounts.id)) return setTimeout(tryInit,300);
     google.accounts.id.initialize({ client_id:CONFIG.GOOGLE_CLIENT_ID, callback:onCredential, auto_select:true });
-    renderAuthSlot();
+    gisReady=true;
+    renderAuthSlot();          // now that GIS is loaded, draw the real Google button
   };
   tryInit();
 }
@@ -425,8 +443,8 @@ function syncUserName(){
   if(u&&u.displayName) state.user.name=u.displayName;
 }
 function decodeJwt(t){ try{ return JSON.parse(atob(t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))); }catch{ return null; } }
-function requireUser(){ if(state.user) return true; toast("Sign in with Google first.","err"); promptSignIn(); return false; }
-function promptSignIn(){ if(hasAuth()&&window.google&&google.accounts) google.accounts.id.prompt(); }
+function requireUser(){ if(state.user) return true; toast("Sign in with the Google button (top-right) first."); promptSignIn(); return false; }
+function promptSignIn(){ try{ if(gisReady) google.accounts.id.prompt(); }catch(e){} }
 
 function renderAuthSlot(){
   const slot=$("#authSlot");
@@ -435,8 +453,18 @@ function renderAuthSlot(){
     slot.innerHTML=`<button class="userchip" id="userChip" aria-label="Account">${av}<span class="nm">${esc(state.user.name)}</span><i class="ti ti-chevron-down" style="font-size:15px;color:var(--text3)"></i></button>`;
     $("#userChip").addEventListener("click",openNameModal);
   } else if(hasAuth()){
-    slot.innerHTML=`<button class="iconbtn" id="signinBtn"><i class="ti ti-brand-google" aria-hidden="true"></i>Sign in</button>`;
-    $("#signinBtn").addEventListener("click",promptSignIn);
+    slot.innerHTML=`<div id="gbtn"></div>`;
+    if(gisReady){
+      try{
+        const dark=document.documentElement.getAttribute("data-theme")==="dark";
+        google.accounts.id.renderButton($("#gbtn"), {theme: dark?"filled_blue":"outline", size:"large", type:"standard", shape:"pill", text:"signin"});
+      }catch(e){
+        slot.innerHTML=`<button class="iconbtn" id="signinBtn"><i class="ti ti-brand-google" aria-hidden="true"></i>Sign in</button>`;
+        $("#signinBtn").addEventListener("click",promptSignIn);
+      }
+    } else {
+      slot.innerHTML=`<button class="iconbtn" disabled style="opacity:.6"><i class="ti ti-brand-google" aria-hidden="true"></i>Sign in</button>`;
+    }
   } else {
     slot.innerHTML="";
   }
@@ -514,6 +542,7 @@ function renderSetupBanner(){
 function setTheme(t){
   document.documentElement.setAttribute("data-theme",t); lsSet("sq_theme",t);
   $("#themeIcon").className = t==="dark"?"ti ti-moon":"ti ti-sun";
+  if(!state.user && hasAuth() && gisReady) renderAuthSlot();   // re-skin Google button to match theme
 }
 $("#themeBtn").addEventListener("click",()=>setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark"));
 
