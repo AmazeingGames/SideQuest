@@ -3,7 +3,7 @@
    =========================================================================== */
 /* ----- CONFIG: ✏️ Lynn fills these in after backend setup (see SETUP.md) ----- */
 const CONFIG = {
-  APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbwJF-QAL0FNlti0e8i1_I2i67JNIhLsIhTNoTK1FoKe6N_Wt4acBaI3725CJXi3uENm/exec",   // Google Apps Script Web App URL (ends in /exec)
+  APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzWOiKrI9H0zqP7YEx6p4OyAo0W-TcdsQRjS17RagnwlSSZaQdIp7mNuHNAjX1G0d-z/exec",   // Google Apps Script Web App URL (ends in /exec)
   GOOGLE_CLIENT_ID: "253371814543-pv1eg7kvmh0hvovddogjbjt958fon5at.apps.googleusercontent.com",  // Google OAuth Client ID (ends in .apps.googleusercontent.com)
 };
 const PEOPLE = [
