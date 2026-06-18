@@ -12,13 +12,10 @@
  ************************************************************************/
 
 /* ====== FILL THESE IN ====== */
-const CLIENT_ID = "253371814543-pv1eg7kvmh0hvovddogjbjt958fon5at.apps.googleusercontent.com";  // your Google OAuth client ID (...apps.googleusercontent.com)
+const CLIENT_ID = "";  // your Google OAuth client ID (...apps.googleusercontent.com)
 const ALLOWED_EMAILS = [
   // lowercase Google account emails allowed to post/vote/comment:
   // "lynn@gmail.com", "blake@gmail.com", "lia@gmail.com", "alvaro@gmail.com",
-    "adrianalicervera@gmail.com",
-    "lopez.neila.alvaro@gmail.com",
-    "blakezdanner@gmail.com",
 ];
 /* ============================== */
 
@@ -85,7 +82,7 @@ function doGet(e){
         modes:splitList(g.modes), dim:g.dim, minPlayers:Math.min(minP,maxP), maxPlayers:maxP,
         mods:String(g.mods)==="true"||g.mods===true,
         note:g.note||"", reviewPct:(g.reviewPct===""||g.reviewPct==null)?null:Number(g.reviewPct), reviewDesc:g.reviewDesc||"",
-        releaseDate:g.releaseDate||"", releaseTs:Number(g.releaseTs)||0, trailer:g.trailer||"",
+        releaseDate:g.releaseDate instanceof Date ? Utilities.formatDate(g.releaseDate, Session.getScriptTimeZone(), "MMM d, yyyy") : String(g.releaseDate||""), releaseTs:Number(g.releaseTs)||0, trailer:g.trailer||"",
         addedBy:g.addedBy||"", addedTs:Number(g.addedTs)||0,
       };
     });
@@ -125,7 +122,7 @@ function doPost(e){
     if(a==="addComment"){
       const id="c"+Date.now()+Math.floor(Math.random()*1000);
       const nm=displayName(user) || String(body.name||"") || user.email;
-      const row={id, appid:String(body.appid), email:user.email, name:nm, picture:user.picture||"", text:String(body.text||"").slice(0,2000), ts:Date.now()};
+      const row={id, appid:String(body.appid), email:user.email, name:nm, picture:String(body.picture||""), text:String(body.text||"").slice(0,2000), ts:Date.now()};
       sheet("Comments").appendRow(SHEETS.Comments.map(k=>row[k]));
       return json({ok:true, comment:row});
     }
@@ -157,6 +154,25 @@ function doPost(e){
       const col=SHEETS.Games.indexOf("note")+1;
       for(let i=1;i<data.length;i++){ if(String(data[i][0])===appid){ sh.getRange(i+1,col).setValue(String(body.note||"")); return json({ok:true}); } }
       return json({ok:false,error:"Not found."});
+    }
+
+    if(a==="editGame"){
+      const g=body.game||{};
+      const appid=String(g.appid||"").replace(/\D/g,"");
+      if(!appid) return json({ok:false,error:"Bad app id."});
+      const sh=sheet("Games"); const data=sh.getDataRange().getValues(); const head=data[0];
+      const col=name=>head.indexOf(name)+1;
+      for(let i=1;i<data.length;i++){
+        if(String(data[i][0])===appid){
+          const updates={title:g.title, people:(g.people||[]).join(","), genres:(g.genres||[]).join(","),
+            modes:(g.modes||[]).join(","), dim:g.dim||"2D",
+            minPlayers:Number(g.minPlayers)||1, maxPlayers:Number(g.maxPlayers)||1,
+            mods:!!g.mods, note:g.note||""};
+          Object.keys(updates).forEach(k=>{ const c=col(k); if(c>0) sh.getRange(i+1,c).setValue(updates[k]); });
+          return json({ok:true});
+        }
+      }
+      return json({ok:false,error:"Game not found."});
     }
 
     return json({ok:false,error:"Unknown action."});

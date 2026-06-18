@@ -28,6 +28,7 @@ const lsGet = k => { try { return localStorage.getItem(k); } catch { return null
 const lsSet = (k,v) => { try { localStorage.setItem(k,v); } catch {} };
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const hasBackend = () => !!CONFIG.APPS_SCRIPT_URL;
+function formatDate(d){ if(!d) return ""; const s=String(d); if(s.includes("T")||s.match(/^\d{4}-\d{2}-\d{2}/)){try{const dt=new Date(s); if(!isNaN(dt))return dt.toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"});}catch{}} return s; }
 const hasAuth = () => !!CONFIG.GOOGLE_CLIENT_ID;
 const COVER = a => `https://cdn.cloudflare.steamstatic.com/steam/apps/${a}/header.jpg`;
 const HEADER = a => `https://cdn.cloudflare.steamstatic.com/steam/apps/${a}/header.jpg`;
@@ -35,10 +36,13 @@ const STEAM_URL = a => `https://store.steampowered.com/app/${a}/`;
 const COVER_FALLBACKS = a => [
   `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${a}/header.jpg`,
   `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${a}/header.jpg`,
+  `https://cdn.cloudflare.steamstatic.com/steam/apps/${a}/capsule_616x353.jpg`,
+  `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${a}/capsule_616x353.jpg`,
+  `https://cdn.cloudflare.steamstatic.com/steam/apps/${a}/library_600x900.jpg`,
 ].join("|");
 window.imgFB = function(img){
   const fb=(img.dataset.fb||"").split("|").filter(Boolean);
-  if(fb.length){ img.dataset.fb=fb.slice(1).join("|"); img.src=fb[0]; } else { img.style.visibility="hidden"; }
+  if(fb.length){ img.dataset.fb=fb.slice(1).join("|"); img.src=fb[0]; } else { img.style.visibility="hidden"; img.classList.add("img-failed"); }
 };
 
 /* ----- inline SVG icons (no webfont dependency) ----- */
@@ -57,6 +61,7 @@ const SVG = {
   sparkles:'<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/>',
   ghost:'<path d="M9 11h.01M15 11h.01M12 2a8 8 0 0 0-8 8v11l3-2 3 2 2-2 2 2 3-2V10a8 8 0 0 0-8-8z"/>',
   arrowRight:'<path d="M5 12h14M13 6l6 6-6 6"/>',
+  edit:'<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
 };
 const I = (name,size=18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${SVG[name]||""}</svg>`;
 const Iplay = (size=18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>`;
@@ -65,8 +70,9 @@ const state = {
   games:[], comments:[], upvotes:[], users:[],
   party:[], matchMode:"all", drawerOpen:false,
   genres:new Set(), genreMode:"all", modes:new Set(), dims:new Set(), modsOnly:false,
+  pcMin:null, pcMax:null,
   search:"", sort:"rating",
-  user:null, token:null, trailerTimer:null,
+  user:null, token:null, trailerTimer:null, detailTab:"details",
 };
 
 function initials(name){ return String(name||"?").trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase(); }
@@ -121,6 +127,7 @@ function visibleGames(){
   }
   if(state.modes.size) g=g.filter(x=>[...state.modes].every(z=>x.modes.includes(z)));
   if(state.dims.size)  g=g.filter(x=>state.dims.has(x.dim));
+  if(state.pcMin!=null && state.pcMax!=null) g=g.filter(x=> x.minPlayers<=state.pcMax && x.maxPlayers>=state.pcMin);
   if(state.modsOnly)   g=g.filter(x=>x.mods);
   const s=state.sort;
   g.sort((a,b)=>{
@@ -145,18 +152,23 @@ function renderGrid(){
   }
   empty.innerHTML="";
   grid.innerHTML=games.map(g=>{
-    const rv=reviewMeta(g), uc=upCount(g.appid);
+    const rv=reviewMeta(g), uc=upCount(g.appid), up=userUpvoted(g.appid);
     const ppl=g.people.map(p=>personDot(p)).join("");
     const tags=g.genres.slice(0,3).map(t=>`<span class="tag g-${gColor(t)}">${esc(t)}</span>`).join("");
-    return `<button class="card" data-app="${g.appid}" aria-label="${esc(g.title)}">
+    const voters=state.upvotes.filter(u=>u.appid===String(g.appid));
+    const voterTip = voters.length
+      ? `<div class="uptip"><div class="uptip-lbl">Upvoted by</div>${voters.map(v=>{const inf=suggesterInfo(v.email);return `<div class="uptip-row"><span class="pa">${esc(inf.initials)}</span>${esc(inf.name)}</div>`;}).join("")}</div>`
+      : `<div class="uptip"><div class="uptip-lbl">No upvotes yet${state.user?" — tap to be first":""}</div></div>`;
+    return `<div class="card" role="button" tabindex="0" data-app="${g.appid}" aria-label="${esc(g.title)}">
       <div class="cover">
         <div class="ph">${I('gamepad',26)}</div>
         <img loading="lazy" src="${COVER(g.appid)}" alt="" data-fb="${COVER_FALLBACKS(g.appid)}" onerror="imgFB(this)">
-        <div class="badge-tl">
-          ${g.mods?`<span class="badge mods">${I('alert',11)}Mods</span>`:""}
-          <span class="badge players">${I('users',12)}${playersLabel(g)}</span>
+        ${g.mods?`<div class="badge-tl"><span class="badge mods">${I('alert',11)}Mods</span></div>`:""}
+        <div class="badge-bl"><span class="badge players">${I('users',12)}${playersLabel(g)}</span></div>
+        <div class="up-wrap">
+          <button class="badge up upbadge ${up?'voted':''}" data-up="${g.appid}" aria-pressed="${up}" aria-label="Upvote">${I('up',12)}<span class="upbadge-n">${uc||""}</span></button>
+          ${voterTip}
         </div>
-        ${uc?`<span class="badge up">${I('up',12)}${uc}</span>`:""}
       </div>
       <div class="cbody">
         <div class="ctitle">${esc(g.title)}</div>
@@ -166,9 +178,13 @@ function renderGrid(){
         </div>
         <div class="tags">${tags}</div>
       </div>
-    </button>`;
+    </div>`;
   }).join("");
-  $$(".card",grid).forEach(c=>c.addEventListener("click",()=>openDetail(c.dataset.app)));
+  $$(".card",grid).forEach(c=>{
+    c.addEventListener("click",e=>{ if(e.target.closest(".upbadge")) return; openDetail(c.dataset.app); });
+    c.addEventListener("keydown",e=>{ if((e.key==="Enter"||e.key===" ")&&!e.target.closest(".upbadge")){ e.preventDefault(); openDetail(c.dataset.app); } });
+  });
+  $$(".upbadge",grid).forEach(b=>b.addEventListener("click",e=>{ e.stopPropagation(); toggleUpvote(b.dataset.up, b); }));
 }
 
 /* ----- drawer ----- */
@@ -207,41 +223,80 @@ function renderFilters(){
   const bar=$("#filterbar");
   const allGenres=[...new Set(state.games.flatMap(g=>g.genres))].sort();
   const genreChips=allGenres.map(g=>`<button class="chip" data-f="genre" data-v="${esc(g)}" aria-pressed="${state.genres.has(g)}">${esc(g)}</button>`).join("");
-  const genreSeg = state.genres.size>=1 ? `<div class="seg sm" role="group" aria-label="Genre match mode" style="margin-left:4px">
+  const genreSeg = `<div class="seg sm ${state.genres.size?'':'inert'}" role="group" aria-label="Genre match mode" style="margin-left:4px">
       <button data-gm="all" aria-pressed="${state.genreMode==='all'}">All</button>
-      <button data-gm="any" aria-pressed="${state.genreMode==='any'}">Any</button></div>` : "";
+      <button data-gm="any" aria-pressed="${state.genreMode==='any'}">Any</button></div>`;
   const modeChips=["Co-op","Competitive"].map(m=>`<button class="chip" data-f="mode" data-v="${m}" aria-pressed="${state.modes.has(m)}">${m}</button>`).join("");
   const dimChips=["2D","3D"].map(d=>`<button class="chip" data-f="dim" data-v="${d}" aria-pressed="${state.dims.has(d)}">${d}</button>`).join("");
+  const PC=[{l:"1",mn:1,mx:1},{l:"2",mn:2,mx:2},{l:"3",mn:3,mx:3},{l:"4",mn:4,mx:4},{l:"2–4",mn:2,mx:4}];
+  const pcChips=PC.map(p=>`<button class="chip" data-f="pc" data-mn="${p.mn}" data-mx="${p.mx}" aria-pressed="${state.pcMin===p.mn&&state.pcMax===p.mx}">${p.l}</button>`).join("")
+    +`<button class="chip" data-f="pc" data-mn="" data-mx="" aria-pressed="${state.pcMin==null}">Any</button>`;
   bar.innerHTML=`
     <div class="fgroup"><span class="flabel">Genre</span>${genreChips}${genreSeg}</div>
     <div class="divider"></div>
     <div class="fgroup"><span class="flabel">Mode</span>${modeChips}</div>
     <div class="divider"></div>
+    <div class="fgroup"><span class="flabel">Players</span>${pcChips}</div>
+    <div class="divider"></div>
     <div class="fgroup">${dimChips}
       <button class="chip" data-f="mods" aria-pressed="${state.modsOnly}">${I('alert',13)} Mods</button>
     </div>
-    ${(state.genres.size||state.modes.size||state.dims.size||state.modsOnly)?`<button class="ghostbtn" id="clearFilters">Clear filters</button>`:""}`;
+    ${(state.genres.size||state.modes.size||state.dims.size||state.modsOnly||state.pcMin!=null)?`<button class="ghostbtn" id="clearFilters">Clear filters</button>`:""}`;
   $$(".chip",bar).forEach(c=>c.addEventListener("click",()=>{
     const f=c.dataset.f, v=c.dataset.v;
     if(f==="genre") state.genres.has(v)?state.genres.delete(v):state.genres.add(v);
     else if(f==="mode") state.modes.has(v)?state.modes.delete(v):state.modes.add(v);
     else if(f==="dim") state.dims.has(v)?state.dims.delete(v):state.dims.add(v);
+    else if(f==="pc"){ const mn=c.dataset.mn===""?null:+c.dataset.mn, mx=c.dataset.mx===""?null:+c.dataset.mx;
+      if(mn==null||(state.pcMin===mn&&state.pcMax===mx)){ state.pcMin=null; state.pcMax=null; } else { state.pcMin=mn; state.pcMax=mx; } }
     else if(f==="mods") state.modsOnly=!state.modsOnly;
     render();
   }));
-  $$("[data-gm]",bar).forEach(b=>b.addEventListener("click",()=>{ state.genreMode=b.dataset.gm; render(); }));
-  const cf=$("#clearFilters"); if(cf) cf.addEventListener("click",()=>{ state.genres.clear(); state.modes.clear(); state.dims.clear(); state.modsOnly=false; render(); });
+  $$("[data-gm]",bar).forEach(b=>b.addEventListener("click",()=>{ if(!state.genres.size) return; state.genreMode=b.dataset.gm; render(); }));
+  const cf=$("#clearFilters"); if(cf) cf.addEventListener("click",()=>{ state.genres.clear(); state.modes.clear(); state.dims.clear(); state.modsOnly=false; state.pcMin=null; state.pcMax=null; render(); });
 }
 
 /* ============================================================ DETAIL MODAL */
 function openDetail(appid){
   const g=state.games.find(x=>x.appid===String(appid)); if(!g) return;
+  if(!state.user && state.detailTab==="edit") state.detailTab="details";
+  $("#detailModal").innerHTML=`
+    <button class="mclose" aria-label="Close">${I('x',18)}</button>
+    <div class="dhero" id="dhero">
+      <img src="${HEADER(g.appid)}" alt="" data-fb="${COVER_FALLBACKS(g.appid)}" onerror="imgFB(this)">
+      <div class="scrimgrad"></div>
+      ${g.trailer?`<button class="trailer-cue" id="trailerCue">${Iplay(15)} Watch trailer</button>`:""}
+    </div>
+    <div class="dtabs" role="tablist">
+      <button class="dtab" data-tab="details" role="tab" aria-selected="${state.detailTab!=="edit"}">Details</button>
+      ${state.user?`<button class="dtab" data-tab="edit" role="tab" aria-selected="${state.detailTab==="edit"}">${I('edit',14)} Edit</button>`:""}
+    </div>
+    <div class="dbody" id="paneDetails" ${state.detailTab==="edit"?'hidden':''}>${detailPaneHTML(g)}</div>
+    ${state.user?`<div class="dbody fbody-edit" id="paneEdit" ${state.detailTab==="edit"?'':'hidden'}>${editPaneHTML(g)}</div>`:""}`;
+
+  const m=$("#detailModal");
+  m.querySelector(".mclose").addEventListener("click",closeModals);
+  $$(".dtab",m).forEach(t=>t.addEventListener("click",()=>switchDetailTab(t.dataset.tab,g)));
+  wireDetailPane(g);
+  if(state.detailTab==="edit") wireEditPane(g);
+  openScrim("#detailScrim");
+
+  if(g.trailer){
+    const cue=$("#trailerCue",m); if(cue) cue.addEventListener("click",()=>mountTrailer(g));
+    const hero=$("#dhero",m); hero.style.cursor="pointer"; hero.addEventListener("click",e=>{ if(!e.target.closest(".trailer-ctrls")) mountTrailer(g); });
+    if(state.detailTab!=="edit"){ clearTimeout(state.trailerTimer); state.trailerTimer=setTimeout(()=>mountTrailer(g), 3000); }
+  }
+}
+
+function detailPaneHTML(g){
   const rv=reviewMeta(g), uc=upCount(g.appid), up=userUpvoted(g.appid);
   const comments=gameComments(g.appid);
-  const genreTags=g.genres.map(t=>`<span class="tag g-${gColor(t)}">${esc(t)}</span>`).join("");
-  const modeTags=g.modes.map(m=>`<span class="tag mode">${esc(m)}</span>`).join("")+`<span class="tag mode">${g.dim}</span>`;
-  const infoBadges=g.people.map(p=>`<span class="infobadge">${personDot(p,"pa")}${esc(PMAP[p])}</span>`).join("");
-  const filterPills=g.people.map(p=>`<button class="fpill" data-pp="${p}" aria-pressed="${state.party.includes(p)}">${personDot(p,"pa")}${esc(PMAP[p])}</button>`).join("");
+  const genreTags=g.genres.map(t=>`<button class="tag g-${gColor(t)} ftag" data-fg="${esc(t)}" aria-pressed="${state.genres.has(t)}">${esc(t)}</button>`).join("");
+  const modeTags=g.modes.map(m=>`<button class="tag mode ftag" data-fm="${esc(m)}" aria-pressed="${state.modes.has(m)}">${esc(m)}</button>`).join("")
+    +`<button class="tag mode ftag" data-fd="${g.dim}" aria-pressed="${state.dims.has(g.dim)}">${g.dim}</button>`;
+  const peoplePills=g.people.map(p=>`<button class="fpill" data-pp="${p}" aria-pressed="${state.party.includes(p)}">${personDot(p,"pa")}${esc(PMAP[p])}</button>`).join("");
+  const voters=state.upvotes.filter(u=>u.appid===String(g.appid));
+  const voterAvatars=voters.slice(0,6).map(v=>{const inf=suggesterInfo(v.email);return `<span class="pa" title="${esc(inf.name)}">${esc(inf.initials)}</span>`;}).join("");
 
   const commentHTML = comments.length ? comments.map(c=>{
     const mine=state.user&&c.email===state.user.email;
@@ -256,40 +311,30 @@ function openDetail(appid){
          <textarea id="cInput" placeholder="Add a comment…" aria-label="Add a comment"></textarea>
          <button class="btn primary" id="cPost" style="align-self:stretch">Post</button></div>`
     : `<div class="signin-hint">Sign in to upvote and comment.</div>`;
-
   const sb = (g.addedBy && g.addedBy!=="seed") ? suggesterInfo(g.addedBy) : null;
 
-  $("#detailModal").innerHTML=`
-    <button class="mclose" aria-label="Close">${I('x',18)}</button>
-    <div class="dhero" id="dhero">
-      <img src="${HEADER(g.appid)}" alt="" data-fb="${COVER_FALLBACKS(g.appid)}" onerror="imgFB(this)">
-      <div class="scrimgrad"></div>
-    </div>
-    <div class="dbody">
+  return `
       <h2 class="dtitle">${esc(g.title)}</h2>
       <div class="dmeta">
         <span class="review ${rv.cls}">${esc(rv.label)}${rv.desc?` · ${esc(rv.desc)}`:""}</span>
         <span class="mi">${I('users',15)} ${playersLabel(g)} player${g.maxPlayers>1?"s":""}</span>
-        ${g.releaseDate?`<span class="mi">${I('calendar',14)} ${esc(g.releaseDate)}</span>`:""}
+        ${g.releaseDate?`<span class="mi">${I('calendar',14)} ${esc(formatDate(g.releaseDate))}</span>`:""}
       </div>
-      <div class="dnote ${g.note?"":"empty-note"}">${g.note?esc(g.note):"No notes yet — Lynn can add thoughts here later."}</div>
+      <div class="dnote ${g.note?"":"empty-note"}">${g.note?esc(g.note):"No notes yet — add one from the Edit tab."}</div>
       ${g.mods?`<div class="modwarn">${I('alert',18)}<div><b>Mods required.</b> This one needs a mod to play together — check the Steam discussions or ask Lynn before your session.</div></div>`:""}
 
-      <div class="dsection"><h3>Genres</h3><div class="dtags">${genreTags}</div></div>
-      <div class="dsection"><h3>Plays as</h3><div class="dtags">${modeTags}</div></div>
-      <div class="dsection"><h3>This one's for</h3><div class="dtags">${infoBadges}</div></div>
+      <div class="dsection"><h3>Who's it for <span class="h3-hint">— tap to filter the list</span></h3>
+        <div class="dtags">${peoplePills}</div></div>
+      <div class="dsection"><h3>Genres &amp; mode <span class="h3-hint">— tap to filter</span></h3>
+        <div class="dtags">${genreTags}${modeTags}</div></div>
 
-      <div class="dsection"><h3>Filter the list by these people</h3>
-        <div class="dtags">${filterPills}</div>
-        <div class="filter-foot">
-          <span class="live-count" id="liveCount"></span>
-          <span class="confirm-msg" id="confirmMsg"></span>
-          <button class="go-results" id="goResults">Show matches ${I('arrowRight',15)}</button>
-        </div>
+      <div class="filter-foot">
+        <span class="live-count" id="liveCount"></span>
+        <button class="go-results" id="goResults">Show matches ${I('arrowRight',15)}</button>
       </div>
 
       <div class="dactions">
-        <button class="upbtn" id="upBtn" aria-pressed="${up}">${I('up',18)}<span id="upTxt">${up?"Upvoted":"Upvote"}</span><span style="opacity:.6">·</span><span id="upNum">${uc}</span></button>
+        <button class="upbtn ${up?'voted':''}" id="upBtn" aria-pressed="${up}">${I('up',18)}<span id="upTxt">${up?"Upvoted":"Upvote"}</span><span style="opacity:.6">·</span><span id="upNum">${uc}</span><span class="up-avatars" id="upAvatars">${voterAvatars}</span></button>
         <a class="steamlink" href="${STEAM_URL(g.appid)}" target="_blank" rel="noopener">View on Steam ${I('external',14)}</a>
       </div>
 
@@ -298,27 +343,60 @@ function openDetail(appid){
       <div class="dsection"><h3>Discussion</h3>
         <div class="comments" id="commentList">${commentHTML}</div>
         ${commentForm}
-      </div>
-    </div>`;
+      </div>`;
+}
 
+function wireDetailPane(g){
   const m=$("#detailModal");
-  m.querySelector(".mclose").addEventListener("click",closeModals);
   $$("[data-pp]",m).forEach(b=>b.addEventListener("click",()=>toggleFromModal(b.dataset.pp)));
+  $$("[data-fg]",m).forEach(b=>b.addEventListener("click",()=>toggleFilterFromModal("genre",b.dataset.fg)));
+  $$("[data-fm]",m).forEach(b=>b.addEventListener("click",()=>toggleFilterFromModal("mode",b.dataset.fm)));
+  $$("[data-fd]",m).forEach(b=>b.addEventListener("click",()=>toggleFilterFromModal("dim",b.dataset.fd)));
   $$("[data-del]",m).forEach(b=>b.addEventListener("click",()=>delComment(b.dataset.del,g.appid)));
-  const upB=$("#upBtn",m); if(upB) upB.addEventListener("click",(e)=>toggleUpvote(g.appid, e.currentTarget));
-  const cp=$("#cPost",m); if(cp) cp.addEventListener("click",(e)=>postComment(g.appid, e.currentTarget));
-  $("#goResults",m).addEventListener("click",()=>{ closeModals(); state.drawerOpen=true; render(); window.scrollTo({top:0,behavior:"smooth"}); });
+  const upB=$("#upBtn",m); if(upB) upB.addEventListener("click",e=>toggleUpvote(g.appid,e.currentTarget));
+  const cp=$("#cPost",m); if(cp) cp.addEventListener("click",e=>postComment(g.appid,e.currentTarget));
+  const gr=$("#goResults",m); if(gr) gr.addEventListener("click",()=>{ closeModals(); window.scrollTo({top:0,behavior:"smooth"}); });
   updateModalFilterUI();
-  openScrim("#detailScrim");
+}
 
-  // trailer: autoplay muted after a short delay; click hero to start immediately
-  const hero=$("#dhero",m);
-  if(g.trailer){
-    hero.style.cursor="pointer";
-    hero.addEventListener("click",()=>mountTrailer(g));
-    clearTimeout(state.trailerTimer);
-    state.trailerTimer=setTimeout(()=>mountTrailer(g), 3000);
-  }
+function switchDetailTab(tab,g){
+  state.detailTab=tab;
+  clearTimeout(state.trailerTimer);
+  $$("#detailModal .dtab").forEach(t=>t.setAttribute("aria-selected", t.dataset.tab===tab));
+  const pd=$("#paneDetails"), pe=$("#paneEdit");
+  if(pd) pd.hidden = tab==="edit";
+  if(pe) pe.hidden = tab!=="edit";
+  if(tab==="edit") wireEditPane(g);
+}
+
+function editPaneHTML(g){
+  const genrePool=[...new Set([...Object.keys(GENRE_COLOR), ...state.games.flatMap(x=>x.genres)])].sort();
+  return `
+      <div class="field"><label>Title</label><input id="eTitle" type="text" value="${esc(g.title)}"></div>
+      <div class="field"><label>Who's it for?</label>
+        <div class="pickrow" id="ePeople">${PEOPLE.map(p=>`<button class="pick" data-v="${p.id}" aria-pressed="${g.people.includes(p.id)}">${esc(p.name)}</button>`).join("")}</div></div>
+      <div class="field"><label>Genres</label>
+        <div class="pickrow" id="eGenres">${genrePool.map(gn=>`<button class="pick" data-v="${esc(gn)}" aria-pressed="${g.genres.includes(gn)}">${esc(gn)}</button>`).join("")}</div>
+        <input id="eGenreNew" type="text" placeholder="New genre (optional)" style="margin-top:7px"></div>
+      <div class="three">
+        <div class="field"><label>Min players</label><input id="eMin" type="number" min="1" max="64" value="${g.minPlayers}"></div>
+        <div class="field"><label>Max players</label><input id="eMax" type="number" min="1" max="64" value="${g.maxPlayers}"></div>
+        <div class="field"><label>Dimension</label><div class="pickrow" id="eDim">${["2D","3D"].map(d=>`<button class="pick" data-v="${d}" aria-pressed="${g.dim===d}">${d}</button>`).join("")}</div></div>
+      </div>
+      <div class="two">
+        <div class="field"><label>Mode</label><div class="pickrow" id="eModes">${["Co-op","Competitive"].map(md=>`<button class="pick" data-v="${md}" aria-pressed="${g.modes.includes(md)}">${md}</button>`).join("")}</div></div>
+        <div class="field"><label>Mods required?</label><div class="pickrow" id="eMods"><button class="pick" data-v="yes" aria-pressed="${g.mods}">Yes, needs mods</button></div></div>
+      </div>
+      <div class="field"><label>Note</label><textarea id="eNote" placeholder="A line about why it's here…">${esc(g.note)}</textarea></div>
+      <div class="formfoot"><button class="btn" id="eCancel">Cancel</button><button class="btn primary" id="eSave">Save changes</button></div>`;
+}
+function wireEditPane(g){
+  const m=$("#paneEdit"); if(!m) return;
+  $$(".pick",m).forEach(b=>{ if(!b.closest("#eDim")&&!b.closest("#eMods")) b.addEventListener("click",()=>b.setAttribute("aria-pressed", b.getAttribute("aria-pressed")!=="true")); });
+  $$("#eDim .pick",m).forEach(b=>b.addEventListener("click",()=>{ $$("#eDim .pick",m).forEach(x=>x.setAttribute("aria-pressed","false")); b.setAttribute("aria-pressed","true"); }));
+  $$("#eMods .pick",m).forEach(b=>b.addEventListener("click",()=>b.setAttribute("aria-pressed", b.getAttribute("aria-pressed")!=="true")));
+  $("#eCancel",m).addEventListener("click",()=>switchDetailTab("details",g));
+  $("#eSave",m).addEventListener("click",()=>saveEdit(g.appid));
 }
 
 function mountTrailer(g){
@@ -344,13 +422,21 @@ function toggleFromModal(id){
   const on = !state.party.includes(id);
   if(on) state.party.push(id); else { const i=state.party.indexOf(id); state.party.splice(i,1); }
   const pill=$(`#detailModal [data-pp="${id}"]`); if(pill) pill.setAttribute("aria-pressed", on);
-  const c=$("#confirmMsg"); if(c){ c.textContent=`${on?"Added":"Removed"} ${PMAP[id]}`; c.classList.add("show"); clearTimeout(window._cmT); window._cmT=setTimeout(()=>c.classList.remove("show"),1900); }
   updateModalFilterUI();
-  render();   // update the grid + drawer behind the modal
+  render();
+}
+function toggleFilterFromModal(type,val){
+  if(type==="genre") state.genres.has(val)?state.genres.delete(val):state.genres.add(val);
+  else if(type==="mode") state.modes.has(val)?state.modes.delete(val):state.modes.add(val);
+  else if(type==="dim") state.dims.has(val)?state.dims.delete(val):state.dims.add(val);
+  const sel = type==="genre"?`[data-fg="${CSS.escape(val)}"]` : type==="mode"?`[data-fm="${CSS.escape(val)}"]` : `[data-fd="${CSS.escape(val)}"]`;
+  const btn=$(`#detailModal ${sel}`);
+  if(btn){ const set = type==="genre"?state.genres : type==="mode"?state.modes : state.dims; btn.setAttribute("aria-pressed", set.has(val)); }
+  updateModalFilterUI();
+  render();
 }
 function updateModalFilterUI(){
   const lc=$("#liveCount"); if(lc){ const n=visibleGames().length; lc.innerHTML=`<b>${n}</b> ${n===1?"game":"games"} match`; }
-  const go=$("#goResults"); if(go) go.toggleAttribute("disabled", state.party.length===0);
 }
 
 /* ============================================================ UPVOTES / COMMENTS */
@@ -362,13 +448,16 @@ async function toggleUpvote(appid, anchor){
   refreshUpUI(appid); renderGrid();
   if(hasBackend()){ const r=await api({action:"toggleUpvote", appid}); if(!r||!r.ok) toast("Vote didn't save.","err"); }
 }
-function refreshUpUI(appid){ const b=$("#upBtn"); if(!b) return; const up=userUpvoted(appid); b.setAttribute("aria-pressed",up); $("#upTxt").textContent=up?"Upvoted":"Upvote"; $("#upNum").textContent=upCount(appid); }
+function refreshUpUI(appid){
+  const b=$("#upBtn"); if(b){ const up=userUpvoted(appid); b.setAttribute("aria-pressed",up); b.classList.toggle("voted",up); const t=$("#upTxt"); if(t)t.textContent=up?"Upvoted":"Upvote"; const n=$("#upNum"); if(n)n.textContent=upCount(appid);
+    const av=$("#upAvatars"); if(av){ const voters=state.upvotes.filter(u=>u.appid===String(appid)); av.innerHTML=voters.slice(0,6).map(v=>{const inf=suggesterInfo(v.email);return `<span class="pa" title="${esc(inf.name)}">${esc(inf.initials)}</span>`;}).join(""); } }
+}
 async function postComment(appid, anchor){
   if(!requireUser(anchor,"Sign in to comment")) return;
   const ta=$("#cInput"); const text=(ta.value||"").trim(); if(!text) return;
   const tmp={ id:"tmp_"+Date.now(), appid:String(appid), email:state.user.email, name:state.user.name, picture:state.user.picture, text, ts:Date.now() };
   state.comments.push(tmp); ta.value=""; reopenDetail(appid);
-  if(hasBackend()){ const r=await api({action:"addComment", appid:String(appid), text, name:state.user.name}); if(r&&r.ok&&r.comment) tmp.id=r.comment.id; else toast("Comment didn't save.","err"); }
+  if(hasBackend()){ const r=await api({action:"addComment", appid:String(appid), text, name:state.user.name, picture:state.user.picture||""}); if(r&&r.ok&&r.comment) tmp.id=r.comment.id; else toast("Comment didn't save.","err"); }
 }
 async function delComment(id,appid){ state.comments=state.comments.filter(c=>c.id!==id); reopenDetail(appid); if(hasBackend()){ const r=await api({action:"deleteComment", id}); if(!r||!r.ok) toast("Couldn't delete.","err"); } }
 function reopenDetail(appid){ renderGrid(); clearTimeout(state.trailerTimer); openDetail(appid); }
@@ -434,6 +523,30 @@ async function saveGame(){
 }
 function normalize(g){ return {appid:String(g.appid),title:g.title||"",people:g.people||[],genres:g.genres||[],modes:g.modes||[],dim:g.dim||"2D",minPlayers:+g.minPlayers||1,maxPlayers:+g.maxPlayers|| (+g.players||4),mods:!!g.mods,note:g.note||"",reviewPct:(g.reviewPct===0||g.reviewPct)?+g.reviewPct:null,reviewDesc:g.reviewDesc||"",releaseDate:g.releaseDate||"",releaseTs:+g.releaseTs||0,trailer:g.trailer||"",addedBy:g.addedBy||"",addedTs:+g.addedTs||Date.now()}; }
 
+async function saveEdit(appid){
+  const m=$("#paneEdit");
+  const sel=sec=>$$(`#${sec} .pick[aria-pressed="true"]`,m).map(b=>b.dataset.v);
+  const genres=sel("eGenres"); const ng=$("#eGenreNew",m).value.trim(); if(ng&&!genres.includes(ng)) genres.push(ng);
+  let minP=+$("#eMin",m).value||1, maxP=+$("#eMax",m).value||1; if(minP>maxP) [minP,maxP]=[maxP,minP];
+  const update={ appid, title:$("#eTitle",m).value.trim(), people:sel("ePeople"), genres,
+    modes:sel("eModes"), dim:(sel("eDim")[0]||"2D"), minPlayers:minP, maxPlayers:maxP,
+    mods:sel("eMods").includes("yes"), note:$("#eNote",m).value.trim() };
+  if(!update.people.length){ toast("Pick at least one person it's for.","err"); return; }
+  const btn=$("#eSave",m); btn.disabled=true; btn.textContent="Saving…";
+  const idx=state.games.findIndex(g=>g.appid===appid);
+  const prev = idx>=0 ? state.games[idx] : null;
+  if(idx>=0) state.games[idx]={...state.games[idx],...update};
+  if(hasBackend()){
+    const r=await api({action:"editGame", game:update});
+    if(!r||!r.ok){
+      if(idx>=0 && prev) state.games[idx]=prev;   // revert optimistic change
+      renderGrid();
+      toast(r&&r.error?r.error:"Couldn't save changes.","err"); btn.disabled=false; btn.textContent="Save changes"; return;
+    }
+  }
+  toast("Saved!"); state.detailTab="details"; renderGrid(); openDetail(appid);
+}
+
 /* ============================================================ AUTH (Google OAuth2 token flow) */
 let tokenClient=null, gisReady=false;
 function initAuth(){
@@ -442,7 +555,11 @@ function initAuth(){
   const tryInit=()=>{
     if(!(window.google&&google.accounts&&google.accounts.oauth2)) return setTimeout(tryInit,300);
     tokenClient=google.accounts.oauth2.initTokenClient({ client_id:CONFIG.GOOGLE_CLIENT_ID, scope:"openid email profile", callback:handleToken });
-    gisReady=true; renderAuthSlot();
+    gisReady=true;
+    // Restore saved user for immediate UI, then silently refresh token
+    const saved=lsGet("ql_user"); if(saved){ try{ state.user=JSON.parse(saved); syncUserName(); renderAuthSlot(); }catch{} }
+    if(state.user) tokenClient.requestAccessToken({prompt:""});
+    else renderAuthSlot();
   };
   tryInit();
 }
@@ -456,6 +573,7 @@ async function handleToken(resp){
     state.user={ email:String(info.email).toLowerCase(), googleName:info.name||info.given_name||"Player", name:info.name||info.given_name||"Player", picture:info.picture||"" };
   }catch(e){ toast("Couldn't load your profile.","err"); return; }
   syncUserName(); renderAuthSlot();
+  lsSet("ql_user", JSON.stringify(state.user));
   if(hasBackend()) refreshAfterAuth();
   const known=state.users.find(u=>u.email===state.user.email);
   if(!known&&!lsGet("ql_named_"+state.user.email)) openNameModal(true);
@@ -504,7 +622,7 @@ async function saveName(){
   lsSet("ql_named_"+state.user.email,"1"); renderAuthSlot(); closeModals(); render();
   if(hasBackend()){ const r=await api({action:"setName", displayName:v}); if(!r||!r.ok) toast("Name didn't save to the server.","err"); }
 }
-function signOut(){ if(state.token&&window.google&&google.accounts&&google.accounts.oauth2) try{ google.accounts.oauth2.revoke(state.token); }catch{} state.user=null; state.token=null; renderAuthSlot(); closeModals(); render(); toast("Signed out."); }
+function signOut(){ if(state.token&&window.google&&google.accounts&&google.accounts.oauth2) try{ google.accounts.oauth2.revoke(state.token); }catch{} state.user=null; state.token=null; lsSet("ql_user",""); renderAuthSlot(); closeModals(); render(); toast("Signed out."); }
 
 /* ============================================================ BACKEND */
 async function api(payload){
