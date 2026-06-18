@@ -3,24 +3,33 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Side Quest — game recs for the crew</title>
+<title>QuestLog — game recs for the crew</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23534AB7'/%3E%3Cpath d='M16 6 L19 15 L16 17 L13 15 Z' fill='%23EF9F27'/%3E%3Ccircle cx='16' cy='22.5' r='2.3' fill='%23EF9F27'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.2.0/tabler-icons.min.css">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <header class="header">
-  <div class="brand"><i class="ti ti-sword" aria-hidden="true"></i><span class="name">Side<b>Quest</b></span></div>
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#534AB7"/><path d="M16 6 L19 15 L16 17 L13 15 Z" fill="#EF9F27"/><circle cx="16" cy="22.5" r="2.3" fill="#EF9F27"/></svg>
+    <span class="name">Quest<b>Log</b></span>
+  </div>
   <div class="search">
-    <i class="ti ti-search" aria-hidden="true"></i>
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>
     <input id="search" type="text" placeholder="Search games…" aria-label="Search games">
   </div>
   <div class="hspacer"></div>
-  <button class="iconbtn" id="themeBtn" aria-label="Toggle dark and light mode"><i class="ti ti-moon" id="themeIcon" aria-hidden="true"></i></button>
-  <button class="iconbtn primary" id="addBtn"><i class="ti ti-plus" aria-hidden="true"></i><span class="hide-sm">Add game</span></button>
+  <button class="iconbtn" id="themeBtn" aria-label="Toggle dark and light mode">
+    <svg class="theme-moon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+    <svg class="theme-sun" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+  </button>
+  <button class="iconbtn primary" id="addBtn">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    <span class="hide-sm">Add game</span>
+  </button>
   <div id="authSlot"></div>
 </header>
 
@@ -29,17 +38,26 @@
 
   <div id="setupBanner"></div>
 
-  <!-- PARTY SELECT -->
-  <section class="panel" aria-labelledby="partyHead">
-    <div class="panel-head"><i class="ti ti-users-group" aria-hidden="true"></i><h2 id="partyHead">Who's playing tonight?</h2></div>
-    <div class="party-row" id="partyRow"></div>
-    <div class="party-controls">
-      <div class="seg" role="group" aria-label="Match mode">
-        <button id="modeAll" data-mode="all" aria-pressed="true">All of them</button>
-        <button id="modeAny" data-mode="any" aria-pressed="false">Any of them</button>
+  <!-- PARTY DRAWER -->
+  <section class="drawer" id="drawer" aria-labelledby="drawerToggle">
+    <button class="drawer-toggle" id="drawerToggle" aria-expanded="false" aria-controls="drawerPanel">
+      <span class="dt-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM3 21v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1M16 3.5a3.5 3.5 0 0 1 0 6.8M21 21v-1a4 4 0 0 0-3-3.8"/></svg></span>
+      <h2>Who's playing?</h2>
+      <span class="dt-summary" id="drawerSummary"></span>
+      <span class="dt-chev"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
+    </button>
+    <div class="drawer-panel" id="drawerPanel">
+      <div class="drawer-inner">
+        <div class="party-row" id="partyRow"></div>
+        <div class="party-controls">
+          <div class="seg" role="group" aria-label="Match mode">
+            <button id="modeAll" data-mode="all" aria-pressed="true">All of them</button>
+            <button id="modeAny" data-mode="any" aria-pressed="false">Any of them</button>
+          </div>
+          <span class="party-readout" id="partyReadout">No one selected — showing everything</span>
+          <button class="ghostbtn" id="clearParty" style="margin-left:auto" hidden>Clear</button>
+        </div>
       </div>
-      <span class="party-readout" id="partyReadout">No one selected — showing everything</span>
-      <button class="ghostbtn" id="clearParty" style="margin-left:auto" hidden>Clear</button>
     </div>
   </section>
 
@@ -64,13 +82,11 @@
   <div id="emptyState"></div>
 </main>
 
-<!-- DETAIL MODAL -->
-<div class="scrim" id="detailScrim"><div class="modal detail" id="detailModal" role="dialog" aria-modal="true" aria-label="Game details"></div></div>
-<!-- ADD GAME MODAL -->
+<div class="scrim" id="detailScrim"><div class="modal" id="detailModal" role="dialog" aria-modal="true" aria-label="Game details"></div></div>
 <div class="scrim" id="addScrim"><div class="modal" id="addModal" role="dialog" aria-modal="true" aria-label="Add a game"></div></div>
-<!-- NAME MODAL -->
-<div class="scrim" id="nameScrim"><div class="modal" id="nameModal" role="dialog" aria-modal="true" aria-label="Set display name" style="max-width:440px"></div></div>
+<div class="scrim" id="nameScrim"><div class="modal" id="nameModal" role="dialog" aria-modal="true" aria-label="Account" style="max-width:440px"></div></div>
 
+<div class="point-tip" id="pointTip"></div>
 <div class="toast" id="toast"></div>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
